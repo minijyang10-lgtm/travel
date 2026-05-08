@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>울산소품샵</title>
+  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=c025e436a257ff63626e3263a5c1822d&libraries=services"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+    body { height: 100vh; overflow: hidden; }
+
+    header {
+      height: 60px; background: #f48fb1;
+      display: flex; align-items: center; padding: 0 15px;
+      position: relative; z-index: 1100;
+    }
+    .menu-btn { font-size: 24px; cursor: pointer; color: white; }
+
+    .sidebar {
+      position: fixed; top: 0; left: -260px; width: 260px; height: 100%;
+      background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.15);
+      transition: 0.3s; z-index: 1200;
+      display: flex; flex-direction: column;
+    }
+    .sidebar.active { left: 0; }
+    .sidebar-header {
+      padding: 20px 16px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 18px; font-weight: 700; color: #f48fb1;
+    }
+    .menu-item {
+      padding: 14px 16px; border-bottom: 1px solid #f5f5f5;
+      cursor: pointer; font-size: 15px; color: #333;
+      transition: background 0.15s;
+    }
+    .menu-item:hover { background: #fde4ec; }
+
+    .overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.3); display: none; z-index: 1000;
+    }
+    .overlay.active { display: block; }
+
+    .main { height: calc(100vh - 60px); position: relative; }
+    #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+    /* 목록 패널 */
+    .list-panel {
+      position: fixed; top: 0; right: -360px; width: 340px; height: 100%;
+      background: white; box-shadow: -2px 0 12px rgba(0,0,0,0.12);
+      z-index: 1300; transition: right 0.3s;
+      display: flex; flex-direction: column;
+    }
+    .list-panel.active { right: 0; }
+    .list-header {
+      padding: 16px; background: #f48fb1;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .list-header h2 { color: white; font-size: 16px; font-weight: 700; }
+    .list-close {
+      background: none; border: none; color: white;
+      font-size: 22px; cursor: pointer; line-height: 1;
+    }
+    .list-scroll { flex: 1; overflow-y: auto; padding: 12px; }
+
+    .shop-card {
+      background: white; border: 1px solid #f0e0e8;
+      border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+      cursor: pointer; transition: box-shadow 0.2s, transform 0.15s;
+    }
+    .shop-card:hover {
+      box-shadow: 0 4px 14px rgba(244,143,177,0.25);
+      transform: translateY(-1px);
+    }
+    .shop-card-name { font-size: 15px; font-weight: 700; color: #333; margin-bottom: 5px; }
+    .shop-card-addr {
+      font-size: 12px; color: #999;
+      display: flex; align-items: flex-start; gap: 4px;
+    }
+    .shop-card-addr::before { content: "📍"; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .tag {
+      display: inline-block; background: #fde4ec; color: #d05e8a;
+      padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+
+    /* 상세 팝업 */
+    .detail-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4); z-index: 1500; display: none;
+      align-items: center; justify-content: center;
+    }
+    .detail-overlay.active { display: flex; }
+
+    .detail-box {
+      background: white; border-radius: 20px; width: 320px;
+      max-height: 88vh; overflow-y: auto;
+      padding: 0 0 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      position: relative;
+    }
+
+    /* 캐러셀 */
+    .carousel {
+      position: relative; width: 100%; height: 200px;
+      background: #f5f5f5; border-radius: 20px 20px 0 0; overflow: hidden;
+    }
+    .carousel-img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: none;
+    }
+    .carousel-img.active { display: block; }
+    .carousel-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      color: #ccc; font-size: 40px; background: #fde4ec;
+    }
+    .carousel-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.85); border: none;
+      width: 32px; height: 32px; border-radius: 50%;
+      font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      z-index: 10;
+    }
+    .carousel-btn.prev { left: 10px; }
+    .carousel-btn.next { right: 10px; }
+    .carousel-counter {
+      position: absolute; bottom: 8px; right: 12px;
+      background: rgba(0,0,0,0.45); color: white;
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    }
+
+    .detail-close {
+      position: absolute; top: 10px; right: 12px;
+      background: rgba(0,0,0,0.35); border: none;
+      color: white; font-size: 18px; cursor: pointer;
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+
+    .detail-content { padding: 16px 18px 0; }
+    .detail-name { font-size: 19px; font-weight: 700; color: #333; margin-bottom: 14px; }
+
+    .info-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 13px; color: #555; margin-bottom: 9px; line-height: 1.6;
+    }
+    .info-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
+    .info-label { color: #aaa; font-size: 11px; margin-bottom: 2px; }
+    .info-text { color: #444; }
+
+    .divider { border: none; border-top: 1px solid #f0f0f0; margin: 12px 0; }
+
+    .badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .badge {
+      background: #fff3f7; color: #d05e8a; border: 1px solid #f8c0d4;
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+
+    .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .detail-tag {
+      background: #f48fb1; color: white;
+      padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    .insta-link { color: #c2185b; text-decoration: none; font-weight: 600; }
+    .insta-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">🛍 울산소품샵</div>
+  <div class="menu-item" onclick="goHome()">🏠 홈</div>
+  <div class="menu-item" onclick="openList()">📋 소품샵 목록</div>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeAll()"></div>
+
+<header>
+  <div class="menu-btn" onclick="toggleMenu()">☰</div>
+</header>
+
+<div class="main">
+  <div id="map"></div>
+</div>
+
+<div class="list-panel" id="listPanel">
+  <div class="list-header">
+    <h2>소품샵 목록</h2>
+    <button class="list-close" onclick="closeList()">✕</button>
+  </div>
+  <div class="list-scroll" id="listScroll"></div>
+</div>
+
+<!-- 상세 팝업 -->
+<div class="detail-overlay" id="detailOverlay">
+  <div class="detail-box">
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+
+    <!-- 캐러셀 -->
+    <div class="carousel" id="carousel">
+      <div class="carousel-placeholder" id="carouselPlaceholder">🏪</div>
+      <button class="carousel-btn prev" id="carouselPrev" onclick="changeSlide(-1)">‹</button>
+      <button class="carousel-btn next" id="carouselNext" onclick="changeSlide(1)">›</button>
+      <div class="carousel-counter" id="carouselCounter"></div>
+    </div>
+
+    <div class="detail-content">
+      <div class="detail-name" id="detailName"></div>
+      <div class="info-row">
+        <span class="info-icon">🕐</span>
+        <div><div class="info-label">영업시간</div><div class="info-text" id="detailHours"></div></div>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">📞</span>
+        <div><div class="info-label">전화번호</div><div class="info-text" id="detailPhone"></div></div>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">📸</span>
+        <div><div class="info-label">인스타그램</div><div class="info-text" id="detailInsta"></div></div>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">📍</span>
+        <div><div class="info-label">주소</div><div class="info-text" id="detailAddr"></div></div>
+      </div>
+      <hr class="divider">
+      <div class="info-label" style="margin-bottom:8px;">특이사항</div>
+      <div class="badge-row" id="detailBadges"></div>
+      <hr class="divider">
+      <div class="detail-tags" id="detailTags"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sidebar       = document.getElementById('sidebar');
+  const overlay       = document.getElementById('overlay');
+  const listPanel     = document.getElementById('listPanel');
+  const listScroll    = document.getElementById('listScroll');
+  const detailOverlay = document.getElementById('detailOverlay');
+  const detailName    = document.getElementById('detailName');
+  const detailHours   = document.getElementById('detailHours');
+  const detailPhone   = document.getElementById('detailPhone');
+  const detailInsta   = document.getElementById('detailInsta');
+  const detailAddr    = document.getElementById('detailAddr');
+  const detailBadges  = document.getElementById('detailBadges');
+  const detailTags    = document.getElementById('detailTags');
+  const carousel      = document.getElementById('carousel');
+  const carouselPlaceholder = document.getElementById('carouselPlaceholder');
+  const carouselPrev  = document.getElementById('carouselPrev');
+  const carouselNext  = document.getElementById('carouselNext');
+  const carouselCounter = document.getElementById('carouselCounter');
+
+  let currentImages = [];
+  let currentIndex  = 0;
+
+  function buildImagePaths(folder, start, end) {
+    const paths = [];
+    for (let i = start; i <= end; i++) {
+      paths.push('./images/' + folder + '/inage' + i + '.jpg');
+    }
+    return paths;
+  }
+
+  const shops = [
+    {
+      name: "무의미",
+      address: "울산광역시 남구 달동 1340-16",
+      tags: ["잡화", "독립서점"],
+      hours: "매일 11:00 - 19:00",
+      phone: "0507-1315-9619",
+      instagram: "@mueui_me",
+      notes: ["주차 불가"],
+      images: [
+        './images/mueui_me/image1.jpg',
+        './images/mueui_me/inage2.jpg',
+        './images/mueui_me/inage3.jpg',
+        './images/mueui_me/inage4.jpg',
+        './images/mueui_me/inage5.jpg'
+      ]
+    },
+    {
+      name: "아쿠네",
+      address: "울산광역시 중구 태화동 472-15",
+      tags: ["펫용품", "주방"],
+      hours: "화-일 12:00 - 18:00 / 월 정기휴무",
+      phone: "0507-1345-4565",
+      instagram: "@shop.akune",
+      notes: ["반려동물 동반", "무선 인터넷"],
+      images: buildImagePaths('akune', 6, 10)
+    },
+    {
+      name: "치호점빵",
+      address: "울산광역시 중구 유곡동 117-21",
+      tags: ["베이커리", "소품"],
+      hours: "화-일 12:00 - 19:00 / 월 정기휴무\n※ 추가 휴무 및 시간 변동은 별도 공지",
+      phone: "없음",
+      instagram: "@chiiho_jumbbang",
+      notes: ["만 14세 이상 구매 가능"],
+      images: buildImagePaths('chiiho_jumbbang', 11, 15)
+    },
+    {
+      name: "데코와",
+      address: "울산광역시 남구 신정동 500-18 1층",
+      tags: ["데코", "리빙"],
+      hours: "월·수-일 11:00 - 19:00 / 화 정기휴무",
+      phone: "010-9904-0936",
+      instagram: "@_decowa_",
+      notes: ["포장", "단체 이용 가능", "반려동물 동반", "무선 인터넷", "배달"],
+      images: buildImagePaths('dekoa', 16, 20)
+    },
+    {
+      name: "포레스트 샤인",
+      address: "울산광역시 중구 태화동 450-7",
+      tags: ["무인", "애니"],
+      hours: "매일 12:00 - 21:00",
+      phone: "010-7937-8757",
+      instagram: "@forestshine_studio",
+      notes: ["반려동물 동반"],
+      images: buildImagePaths('forest_shine', 21, 25)
+    },
+    {
+      name: "안녕소소",
+      address: "울산광역시 중구 태화동 472-5",
+      tags: ["가챠", "사진스팟"],
+      hours: "매일 11:00 - 21:00",
+      phone: "010-4889-0763",
+      instagram: "@hi_soso_",
+      notes: ["반려동물 동반", "주차 불가"],
+      images: buildImagePaths('hello_soso', 26, 30)
+    },
+    {
+      name: "모리모리 하우스",
+      address: "울산광역시 남구 삼산동 1501-2 1층",
+      tags: ["인테리어", "소품"],
+      hours: "월-일 12:00 - 18:30",
+      phone: "0507-1463-3485",
+      instagram: "@monitoring.zip",
+      notes: ["단체 이용 가능", "포장", "배달", "반려동물 동반"],
+      images: buildImagePaths('morimorihouse', 31, 35)
+    },
+    {
+      name: "설탕상점",
+      address: "울산광역시 남구 삼산동 1466-15",
+      tags: ["캐릭터", "달달"],
+      hours: "월-일 11:00 - 19:00 / 휴무일 추가 공지",
+      phone: "0507-1311-9093",
+      instagram: "@market_sugar",
+      notes: ["무선 인터넷", "포장", "남/녀 화장실 구분", "방문접수/출장", "반려동물 동반", "예약 가능"],
+      images: buildImagePaths('sugarstore', 36, 40)
+    },
+    {
+      name: "티히",
+      address: "울산광역시 남구 달동 1354-9 1층",
+      tags: ["문구", "잡화"],
+      hours: "월·수-토 10:00 - 19:00 / 일 12:00 - 17:00 / 화 정기휴무",
+      phone: "0507-1397-2980",
+      instagram: "@shop_tehe",
+      notes: ["주차 불가"],
+      images: buildImagePaths('tehe', 41, 45)
+    },
+    {
+      name: "위즈냥 잡화점",
+      address: "울산광역시 남구 신정동 1228-7",
+      tags: ["고양이", "잡화"],
+      hours: "월-금 12:00 - 19:00 / 토·일 12:00 - 17:00",
+      phone: "0507-1447-0214",
+      instagram: "@wiznyang_store",
+      notes: ["간헐적 무인 운영", "무인 운영일 직원 미상주"],
+      images: buildImagePaths('wiznyangstore', 46, 50)
+    },
+    {
+      name: "아인마밍",
+      address: "울산광역시 남구 삼산동 1507-10",
+      tags: ["패브릭", "소품"],
+      hours: "월-토 12:00 - 19:00 / 일 13:00 - 19:00\n※ 휴일은 매월 일정에 따라 유동적",
+      phone: "0507-1333-6499",
+      instagram: "@ainmaming_store",
+      notes: ["반려동물 동반", "예약 가능", "단체 이용 가능", "주차 가능"],
+      images: buildImagePaths('ainmaming', 51, 55)
+    }
+  ];
+
+  // 목록 카드 생성
+  shops.forEach(function(shop) {
+    const card = document.createElement('div');
+    card.className = 'shop-card';
+    card.innerHTML =
+      '<div class="shop-card-name">' + shop.name + '</div>' +
+      '<div class="shop-card-addr">' + shop.address + '</div>' +
+      '<div class="tag-row">' +
+        shop.tags.map(function(t){ return '<span class="tag">' + t + '</span>'; }).join('') +
+      '</div>';
+    card.onclick = function() { showDetail(shop); };
+    listScroll.appendChild(card);
+  });
+
+  // 카카오 지도
+  kakao.maps.load(function() {
+    const map = new kakao.maps.Map(document.getElementById('map'), {
+      center: new kakao.maps.LatLng(35.5384, 129.3114),
+      level: 5
+    });
+    const geocoder = new kakao.maps.services.Geocoder();
+    shops.forEach(function(shop) {
+      geocoder.addressSearch(shop.address, function(result, status) {
+        if (status === kakao.maps.services.Status.OK) {
+          const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+          const marker = new kakao.maps.Marker({ map: map, position: coords });
+          kakao.maps.event.addListener(marker, 'click', function() {
+            closeList();
+            showDetail(shop);
+          });
+        }
+      });
+    });
+  });
+
+  // 캐러셀 렌더링
+  function renderCarousel() {
+    // 기존 이미지 태그 제거
+    carousel.querySelectorAll('.carousel-img').forEach(function(el){ el.remove(); });
+
+    if (!currentImages || currentImages.length === 0) {
+      carouselPlaceholder.style.display = 'flex';
+      carouselPrev.style.display = 'none';
+      carouselNext.style.display = 'none';
+      carouselCounter.style.display = 'none';
+      return;
+    }
+
+    carouselPlaceholder.style.display = 'none';
+
+    currentImages.forEach(function(src, idx) {
+      const img = document.createElement('img');
+      img.className = 'carousel-img' + (idx === currentIndex ? ' active' : '');
+      img.src = src;
+      img.alt = '가게 사진';
+      img.onerror = function() { this.style.display = 'none'; };
+      carousel.appendChild(img);
+    });
+
+    const showArrows = currentImages.length > 1;
+    carouselPrev.style.display = showArrows ? 'flex' : 'none';
+    carouselNext.style.display = showArrows ? 'flex' : 'none';
+    carouselCounter.style.display = showArrows ? 'block' : 'none';
+    carouselCounter.innerText = (currentIndex + 1) + ' / ' + currentImages.length;
+  }
+
+  function changeSlide(dir) {
+    const imgs = carousel.querySelectorAll('.carousel-img');
+    imgs[currentIndex].classList.remove('active');
+    currentIndex = (currentIndex + dir + currentImages.length) % currentImages.length;
+    imgs[currentIndex].classList.add('active');
+    carouselCounter.innerText = (currentIndex + 1) + ' / ' + currentImages.length;
+  }
+
+  // 상세 팝업 표시
+  function showDetail(shop) {
+    currentImages = shop.images || [];
+    currentIndex  = 0;
+    renderCarousel();
+
+    detailName.innerText  = shop.name;
+    detailHours.innerText = shop.hours;
+    detailPhone.innerText = shop.phone;
+    detailInsta.innerHTML = '<a class="insta-link" href="https://instagram.com/' +
+      shop.instagram.replace('@','') + '" target="_blank">' + shop.instagram + '</a>';
+    detailAddr.innerText  = shop.address;
+
+    detailBadges.innerHTML = shop.notes.map(function(n){
+      return '<span class="badge">' + n + '</span>';
+    }).join('');
+    detailTags.innerHTML = shop.tags.map(function(t){
+      return '<span class="detail-tag">' + t + '</span>';
+    }).join('');
+
+    detailOverlay.classList.add('active');
+  }
+
+  function closeDetail() { detailOverlay.classList.remove('active'); }
+
+  detailOverlay.addEventListener('click', function(e) {
+    if (e.target === detailOverlay) closeDetail();
+  });
+
+  function openList() {
+    listPanel.classList.add('active');
+    sidebar.classList.remove('active');
+    overlay.classList.remove('active');
+  }
+  function closeList()  { listPanel.classList.remove('active'); }
+  function toggleMenu() {
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('active');
+  }
+  function goHome() { closeAll(); }
+  function closeAll() {
+    sidebar.classList.remove('active');
+    overlay.classList.remove('active');
+    listPanel.classList.remove('active');
+    detailOverlay.classList.remove('active');
+  }
+</script>
+</body>
+</html>
